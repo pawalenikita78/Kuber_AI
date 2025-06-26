@@ -224,22 +224,12 @@
             <button type="submit" id="send-btn">
                 <i class="fas fa-paper-plane"></i>
             </button>
-            <button type="button" id="mic-btn" onclick="toggleVoiceInput()">
-                <i class="fas fa-microphone-slash"></i>
-            </button>
         </form>
     </div>
 
     <script>
-        let recognition;
-        let isListening = false;
-        let isBotSpeaking = false;
-        let selectedVoice = null;
-        let lastSpeechTime = 0;
-
         // Initialize the chat with a welcome message
         window.onload = function() {
-            loadVoices();
             setTimeout(() => {
                 const welcomeMessage = "Hello! How can I help you today?";
                 const messages = document.getElementById('messages');
@@ -256,8 +246,6 @@
                     botMessage.className = 'bot-message';
                     botMessage.textContent = welcomeMessage;
                     messages.appendChild(botMessage);
-                    
-                    speakResponse(welcomeMessage);
                 }, 1500);
             }, 500);
         };
@@ -296,7 +284,6 @@
                 botMessage.textContent = response.data.response;
                 messages.appendChild(botMessage);
                 scrollToBottom();
-                speakResponse(response.data.response);
             })
             .catch(function(error) {
                 messages.removeChild(botTypingIndicator);
@@ -311,129 +298,6 @@
         function scrollToBottom() {
             const chatWindow = document.getElementById('chat-window');
             chatWindow.scrollTop = chatWindow.scrollHeight;
-        }
-        
-        function loadVoices() {
-            const voices = window.speechSynthesis.getVoices();
-            selectedVoice = voices.find(voice => 
-                voice.name.toLowerCase().includes('neerja') || 
-                voice.lang.includes('en-IN') || 
-                voice.lang.includes('en-US')
-            );
-
-            if (!selectedVoice && voices.length > 0) {
-                selectedVoice = voices[0]; // Fallback to first available voice
-            }
-        }
-
-        function speakResponse(text) {
-            if (!window.speechSynthesis) {
-                console.warn("Speech synthesis not supported");
-                return;
-            }
-
-            // Stop any ongoing speech
-            window.speechSynthesis.cancel();
-            
-            // Stop voice recognition if active
-            if (isListening) {
-                recognition.stop();
-            }
-
-            const speech = new SpeechSynthesisUtterance(text);
-            speech.lang = 'en-US';
-            
-            if (selectedVoice) {
-                speech.voice = selectedVoice;
-            }
-
-            speech.rate = 0.9;
-            speech.pitch = 1;
-            speech.volume = 1;
-
-            speech.onstart = () => {
-                isBotSpeaking = true;
-                document.getElementById('mic-btn').classList.remove('active');
-                document.getElementById('mic-btn').innerHTML = '<i class="fas fa-microphone-slash"></i>';
-            };
-
-            speech.onend = () => {
-                isBotSpeaking = false;
-                lastSpeechTime = Date.now();
-                
-                // Restart recognition if it was active
-                if (isListening) {
-                    setTimeout(() => {
-                        recognition.start();
-                        document.getElementById('mic-btn').classList.add('active');
-                        document.getElementById('mic-btn').innerHTML = '<i class="fas fa-microphone"></i>';
-                    }, 500);
-                }
-            };
-
-            speech.onerror = (event) => {
-                console.error('Speech synthesis error:', event);
-                isBotSpeaking = false;
-            };
-
-            window.speechSynthesis.speak(speech);
-        }
-
-        function toggleVoiceInput() {
-            if (!('webkitSpeechRecognition' in window)) {
-                alert('Speech recognition is not supported in your browser. Please use Chrome or Edge.');
-                return;
-            }
-
-            if (isListening) {
-                recognition.stop();
-                isListening = false;
-                document.getElementById('mic-btn').classList.remove('active');
-                document.getElementById('mic-btn').innerHTML = '<i class="fas fa-microphone-slash"></i>';
-            } else {
-                // Don't start if bot is speaking
-                if (isBotSpeaking) {
-                    alert('Please wait until the bot finishes speaking.');
-                    return;
-                }
-
-                recognition = new (window.webkitSpeechRecognition || window.SpeechRecognition)();
-                recognition.lang = 'en-US';
-                recognition.interimResults = false;
-                recognition.continuous = true;
-
-                recognition.onstart = function() {
-                    isListening = true;
-                    document.getElementById('mic-btn').classList.add('active');
-                    document.getElementById('mic-btn').innerHTML = '<i class="fas fa-microphone"></i>';
-                };
-
-                recognition.onresult = function(event) {
-                    const transcript = event.results[event.results.length - 1][0].transcript.trim();
-                    if (transcript && Date.now() - lastSpeechTime > 1000) {
-                        document.getElementById('prompt').value = transcript;
-                        sendMessage();
-                    }
-                };
-
-                recognition.onerror = function(event) {
-                    console.error('Speech recognition error:', event.error);
-                    if (event.error !== 'no-speech') {
-                        alert('Voice input failed: ' + event.error);
-                    }
-                    isListening = false;
-                    document.getElementById('mic-btn').classList.remove('active');
-                    document.getElementById('mic-btn').innerHTML = '<i class="fas fa-microphone-slash"></i>';
-                };
-
-                recognition.onend = function() {
-                    if (isListening && !isBotSpeaking) {
-                        recognition.start();
-                    }
-                };
-
-                recognition.start();
-            }
         }
 
         // Handle form submission with Enter key
