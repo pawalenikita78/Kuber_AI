@@ -275,24 +275,54 @@
 
             // Make an API call to Django backend
             axios.get('/get_chatbot_response/', {
-                params: { user_input: prompt }
-            })
-            .then(function(response) {
-                messages.removeChild(botTypingIndicator);
-                const botMessage = document.createElement('div');
-                botMessage.className = 'bot-message';
-                botMessage.textContent = response.data.response;
-                messages.appendChild(botMessage);
-                scrollToBottom();
-            })
-            .catch(function(error) {
-                messages.removeChild(botTypingIndicator);
-                const botMessage = document.createElement('div');
-                botMessage.className = 'bot-message';
-                botMessage.textContent = "Sorry, there was an error. Please try again.";
-                messages.appendChild(botMessage);
-                scrollToBottom();
-            });
+    params: { user_input: prompt }
+})
+.then(function(response) {
+    messages.removeChild(botTypingIndicator);
+
+    // Handle reply_to_question
+    if(response.data.reply_to_question) {
+        const botMessage = document.createElement('div');
+        botMessage.className = 'bot-message';
+        botMessage.textContent = response.data.reply_to_question;
+        messages.appendChild(botMessage);
+    }
+
+    // Handle gold_plan_suggestion (if present)
+    if(response.data.gold_plan_suggestion) {
+    const plan = response.data.gold_plan_suggestion;
+
+    // Create a new bot message div
+    const botPlanMessage = document.createElement('div');
+    botPlanMessage.className = 'bot-message';
+
+    // Insert the styled HTML card
+    botPlanMessage.innerHTML = `
+        <div style="padding: 12px; border-radius: 12px; background: linear-gradient(145deg, #a855f7, #c084fc); color: white; max-width: 300px; box-shadow: 0px 4px 6px rgba(0,0,0,0.1);">
+            <p><strong>Would you like to invest in gold?</strong></p>
+            <p><strong>Plan:</strong> ${plan.name}</p>
+            <p><strong>Info:</strong> ${plan.description}</p>
+            <button style="background: white; color: #a855f7; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: bold;">
+            Buy Now
+        </button>
+        </div>
+    `;
+
+    // Append it to your messages container
+    messages.appendChild(botPlanMessage);
+}
+
+
+    scrollToBottom();
+})
+.catch(function(error) {
+    messages.removeChild(botTypingIndicator);
+    const botMessage = document.createElement('div');
+    botMessage.className = 'bot-message';
+    botMessage.textContent = "Sorry, there was an error. Please try again.";
+    messages.appendChild(botMessage);
+    scrollToBottom();
+});
         }
 
         function scrollToBottom() {
@@ -309,3 +339,4 @@
     </script>
 </body>
 </html>
+
