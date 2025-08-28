@@ -151,6 +151,10 @@
             background: linear-gradient(145deg, #28a745, #218838);
         }
 
+        #mic-btn.recording {
+            animation: pulse 1.5s infinite;
+        }
+
         #mic-btn i {
             font-size: 16px;
         }
@@ -170,6 +174,55 @@
                 opacity: 1;
                 transform: translateY(0);
             }
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7);
+            }
+            70% {
+                transform: scale(1.05);
+                box-shadow: 0 0 0 10px rgba(220, 53, 69, 0);
+            }
+            100% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(220, 53, 69, 0);
+            }
+        }
+
+        /* Audio player styling */
+        .audio-player {
+            margin-top: 8px;
+            width: 100%;
+            max-width: 250px;
+        }
+
+        .audio-player audio {
+            width: 100%;
+        }
+
+        .recording-indicator {
+            display: inline-block;
+            margin-left: 8px;
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .recording-indicator .dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #dc3545;
+            margin-right: 4px;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
         }
 
         /* Scrollbar styling */
@@ -221,6 +274,9 @@
         </div>
         <form onsubmit="event.preventDefault(); sendMessage();">
             <input type="text" id="prompt" placeholder="Type your message here..." autocomplete="off" />
+            <button type="button" id="mic-btn">
+                <i class="fas fa-microphone"></i>
+            </button>
             <button type="submit" id="send-btn">
                 <i class="fas fa-paper-plane"></i>
             </button>
@@ -228,6 +284,14 @@
     </div>
 
     <script>
+        // Global variables for audio recording
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let isRecording = false;
+        let recordingTimer = null;
+        let recordingDuration = 0;
+        let firstAudioResponse = true;
+
         // Initialize the chat with a welcome message
         window.onload = function() {
             setTimeout(() => {
@@ -248,7 +312,208 @@
                     messages.appendChild(botMessage);
                 }, 1500);
             }, 500);
+
+            // Initialize microphone button
+            const micBtn = document.getElementById('mic-btn');
+            micBtn.addEventListener('click', toggleRecording);
         };
+
+        // Toggle microphone recording
+        async function toggleRecording() {
+            if (isRecording) {
+                stopRecording();
+            } else {
+                await startRecording();
+            }
+        }
+
+        // Start audio recording
+        async function startRecording() {
+            try {
+                // Request microphone access
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                
+                // Initialize media recorder
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+                recordingDuration = 0;
+                
+                // Set up event handlers
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                };
+                
+                mediaRecorder.onstop = () => {
+                    // Create audio blob from recorded chunks
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    
+                    // Send the audio to the backend
+                    sendAudioMessage(audioBlob);
+                    
+                    // Create a URL for the audio blob
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    
+                    // Display the audio player for user's recording
+                    displayAudioPlayer(audioUrl, true);
+                    
+                    // Stop all tracks in the stream
+                    stream.getTracks().forEach(track => track.stop());
+                };
+                
+                // Start recording
+                mediaRecorder.start();
+                isRecording = true;
+                
+                // Update UI
+                const micBtn = document.getElementById('mic-btn');
+                micBtn.classList.add('active', 'recording');
+                
+                // Start recording timer
+                startRecordingTimer();
+                
+            } catch (error) {
+                console.error('Error accessing microphone:', error);
+                alert('Could not access microphone. Please ensure it is available and permissions are granted.');
+            }
+        }
+
+        // Stop audio recording
+        function stopRecording() {
+            if (mediaRecorder && isRecording) {
+                mediaRecorder.stop();
+                isRecording = false;
+                
+                // Update UI
+                const micBtn = document.getElementById('mic-btn');
+                micBtn.classList.remove('active', 'recording');
+                
+                // Stop recording timer
+                stopRecordingTimer();
+            }
+        }
+
+        // Start recording timer to track duration
+        function startRecordingTimer() {
+            recordingDuration = 0;
+            const timerDisplay = document.createElement('span');
+            timerDisplay.className = 'recording-indicator';
+            timerDisplay.innerHTML = '<span class="dot"></span>Recording: 0s';
+            
+            // Add timer to mic button
+            const micBtn = document.getElementById('mic-btn');
+            micBtn.appendChild(timerDisplay);
+            
+            // Update timer every second
+            recordingTimer = setInterval(() => {
+                recordingDuration++;
+                timerDisplay.innerHTML = `<span class="dot"></span>Recording: ${recordingDuration}s`;
+            }, 1000);
+        }
+
+        // Stop recording timer
+        function stopRecordingTimer() {
+            if (recordingTimer) {
+                clearInterval(recordingTimer);
+                recordingTimer = null;
+                
+                // Remove timer display
+                const timerDisplay = document.querySelector('.recording-indicator');
+                if (timerDisplay) {
+                    timerDisplay.remove();
+                }
+            }
+        }
+
+        // Send audio message to backend
+        function sendAudioMessage(audioBlob) {
+            const messages = document.getElementById('messages');
+            
+            // Show typing indicator
+            const botTypingIndicator = document.createElement('div');
+            botTypingIndicator.className = 'typing-indicator bot-typing';
+            botTypingIndicator.textContent = 'Bot is processing audio...';
+            messages.appendChild(botTypingIndicator);
+            scrollToBottom();
+            
+            // Create form data to send the audio file
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'recording.webm');
+            
+            // Make an API call to send audio
+            axios.post('/process_audio/', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            })
+            .then(function(response) {
+                messages.removeChild(botTypingIndicator);
+                
+                // Handle text response
+                if (response.data.text_response) {
+                    const botMessage = document.createElement('div');
+                    botMessage.className = 'bot-message';
+                    botMessage.textContent = response.data.text_response;
+                    messages.appendChild(botMessage);
+                }
+                
+                // Handle audio response
+                if (response.data.audio_response) {
+                    // Assuming the response contains a URL to the audio file
+                    const audioUrl = response.data.audio_response;
+                    displayAudioPlayer(audioUrl, false, true);
+                }
+                
+                scrollToBottom();
+            })
+            .catch(function(error) {
+                messages.removeChild(botTypingIndicator);
+                const botMessage = document.createElement('div');
+                botMessage.className = 'bot-message';
+                botMessage.textContent = "Sorry, there was an error processing your audio. Please try again.";
+                messages.appendChild(botMessage);
+                scrollToBottom();
+            });
+        }
+
+        // Display audio player in chat
+        function displayAudioPlayer(audioUrl, isUserMessage = false, isBotResponse = false) {
+            const messages = document.getElementById('messages');
+            
+            // Create message container
+            const messageDiv = document.createElement('div');
+            messageDiv.className = isUserMessage ? 'user-message' : 'bot-message';
+            
+            // Create audio element
+            const audioElement = document.createElement('audio');
+            audioElement.controls = true;
+            audioElement.src = audioUrl;
+            
+            // Add audio player to message
+            const audioContainer = document.createElement('div');
+            audioContainer.className = 'audio-player';
+            audioContainer.appendChild(audioElement);
+            messageDiv.appendChild(audioContainer);
+            
+            // Add to chat
+            messages.appendChild(messageDiv);
+            scrollToBottom();
+            
+            // Auto-play if it's the first bot audio response
+            if (isBotResponse && firstAudioResponse) {
+                firstAudioResponse = false;
+                audioElement.play().catch(e => {
+                    console.log('Auto-play prevented:', e);
+                });
+            }
+            
+            // Add event listener for when audio finishes playing
+            audioElement.addEventListener('ended', () => {
+                if (isBotResponse) {
+                    // You could add a visual indicator that playback finished
+                    console.log('Audio playback finished');
+                }
+            });
+        }
 
         function sendMessage() {
             const promptInput = document.getElementById('prompt');
@@ -275,54 +540,53 @@
 
             // Make an API call to Django backend
             axios.get('/get_chatbot_response/', {
-    params: { user_input: prompt }
-})
-.then(function(response) {
-    messages.removeChild(botTypingIndicator);
+                params: { user_input: prompt }
+            })
+            .then(function(response) {
+                messages.removeChild(botTypingIndicator);
 
-    // Handle reply_to_question
-    if(response.data.reply_to_question) {
-        const botMessage = document.createElement('div');
-        botMessage.className = 'bot-message';
-        botMessage.textContent = response.data.reply_to_question;
-        messages.appendChild(botMessage);
-    }
+                // Handle reply_to_question
+                if(response.data.reply_to_question) {
+                    const botMessage = document.createElement('div');
+                    botMessage.className = 'bot-message';
+                    botMessage.textContent = response.data.reply_to_question;
+                    messages.appendChild(botMessage);
+                }
 
-    // Handle gold_plan_suggestion (if present)
-    if(response.data.gold_plan_suggestion) {
-    const plan = response.data.gold_plan_suggestion;
+                // Handle gold_plan_suggestion (if present)
+                if(response.data.gold_plan_suggestion) {
+                    const plan = response.data.gold_plan_suggestion;
 
-    // Create a new bot message div
-    const botPlanMessage = document.createElement('div');
-    botPlanMessage.className = 'bot-message';
+                    // Create a new bot message div
+                    const botPlanMessage = document.createElement('div');
+                    botPlanMessage.className = 'bot-message';
 
-    // Insert the styled HTML card
-    botPlanMessage.innerHTML = `
-        <div style="padding: 12px; border-radius: 12px; background: linear-gradient(145deg, #a855f7, #c084fc); color: white; max-width: 300px; box-shadow: 0px 4px 6px rgba(0,0,0,0.1);">
-            <p><strong>Would you like to invest in gold?</strong></p>
-            <p><strong>Plan:</strong> ${plan.name}</p>
-            <p><strong>Info:</strong> ${plan.description}</p>
-            <button style="background: white; color: #a855f7; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: bold;">
-            Buy Now
-        </button>
-        </div>
-    `;
+                    // Insert the styled HTML card
+                    botPlanMessage.innerHTML = `
+                        <div style="padding: 12px; border-radius: 12px; background: linear-gradient(145deg, #a855f7, #c084fc); color: white; max-width: 300px; box-shadow: 0px 4px 6px rgba(0,0,0,0.1);">
+                            <p><strong>Would you like to invest in gold?</strong></p>
+                            <p><strong>Plan:</strong> ${plan.name}</p>
+                            <p><strong>Info:</strong> ${plan.description}</p>
+                            <button style="background: white; color: #a855f7; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: bold;">
+                            Buy Now
+                        </button>
+                        </div>
+                    `;
 
-    // Append it to your messages container
-    messages.appendChild(botPlanMessage);
-}
+                    // Append it to your messages container
+                    messages.appendChild(botPlanMessage);
+                }
 
-
-    scrollToBottom();
-})
-.catch(function(error) {
-    messages.removeChild(botTypingIndicator);
-    const botMessage = document.createElement('div');
-    botMessage.className = 'bot-message';
-    botMessage.textContent = "Sorry, there was an error. Please try again.";
-    messages.appendChild(botMessage);
-    scrollToBottom();
-});
+                scrollToBottom();
+            })
+            .catch(function(error) {
+                messages.removeChild(botTypingIndicator);
+                const botMessage = document.createElement('div');
+                botMessage.className = 'bot-message';
+                botMessage.textContent = "Sorry, there was an error. Please try again.";
+                messages.appendChild(botMessage);
+                scrollToBottom();
+            });
         }
 
         function scrollToBottom() {
@@ -339,4 +603,3 @@
     </script>
 </body>
 </html>
-
