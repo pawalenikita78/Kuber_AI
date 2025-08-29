@@ -18,21 +18,41 @@ APP = FastAPI(title="Gold-RAG-Detector")
 import itertools
 import requests
 
-# Load multiple keys
-mistral_keys = os.getenv("MISTRAL_KEYS", "").split(",")
-if not mistral_keys or mistral_keys == [""]:
-    raise RuntimeError("Set MISTRAL_KEYS environment variable (comma-separated)")
+keys = ["gZpdsfMt9NABVJQSaRLezLg5RYgYDYjP","PhgwsJ9ivnJXGyGlqBJDy2DLUucbMjGm","NY0JaCfvMxmR7B3XNXvjD0tl3UQyoQCd"]
 
-# Round-robin cycle
-key_cycle = itertools.cycle(mistral_keys)
+def get_mistral_client(api_key):
+    return Mistral(api_key=api_key)
+
+def get_valid_api_key():
+    """
+    Checks all API keys and returns the first valid one.
+    If none are valid, raises an Exception.
+    """
+    for api_key in keys:
+        try:
+            client = get_mistral_client(api_key)
+            # Do a tiny test request
+            response = client.chat.complete(
+                model="mistral-small-latest",  # lightweight check
+                messages=[{"role": "user", "content": "ping"}]
+            )
+            if response:  # Key worked
+                return api_key  
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 429:
+                # Quota/rate limit reached
+                continue
+        except Exception:
+            continue
+    
+    # If we reach here, no key worked
+    raise Exception("No valid API key available!")
 
 def call_mistral(messages, model="mistral-small", temperature=0.2, max_tokens=500, retries=None):
-    """Try multiple API keys with retry if one fails"""
-    if retries is None:
-        retries = len(mistral_keys)
+    
 
     for _ in range(retries):
-        api_key = next(key_cycle)
+        api_key = get_valid_api_key()
         client = Mistral(api_key=api_key)
         try:
             resp = client.chat.complete(model=model, messages=messages, temperature=temperature, max_tokens=max_tokens)

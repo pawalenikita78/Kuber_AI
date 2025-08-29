@@ -6,6 +6,42 @@ import speech_recognition as sr
 from pydub import AudioSegment
 import tempfile
 import os
+import itertools
+from dotenv import load_dotenv
+from mistralai import Mistral
+# Load multiple keys
+
+keys = ["5PizKMeGue7i8l3vmPrrg7rWY3XSVldM", "6SzecXVxvsCIPnAlLtaU8ToKFap5Ltpe", "MvcYwj7OKHCBV3e2TyEre9p3JKD9wYCS"]
+
+def get_mistral_client(api_key):
+    return Mistral(api_key=api_key)
+
+def get_valid_api_key():
+    """
+    Checks all API keys and returns the first valid one.
+    If none are valid, raises an Exception.
+    """
+    for api_key in keys:
+        try:
+            client = get_mistral_client(api_key)
+            # Do a tiny test request
+            response = client.chat.complete(
+                model="mistral-small-latest",  # lightweight check
+                messages=[{"role": "user", "content": "ping"}]
+            )
+            if response:  # Key worked
+                return api_key  
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 429:
+                # Quota/rate limit reached
+                continue
+        except Exception:
+            continue
+    
+    # If we reach here, no key worked
+    raise Exception("No valid API key available!")
+
+
 
 # Mistral API query function (Using API key)
 def query_mistral(prompt, context, history=None, max_tokens=500):
@@ -40,7 +76,7 @@ Kuber AI: Smart move! The Debt Tracker in Simplify Money helps you see how much 
 **Now answer this user’s question:**'''
 
     api_url = "https://api.mistral.ai/v1/chat/completions"
-    api_key = "8m8WdBCe2wTrlc6arVyOOY1x0lSOP8FT"
+    api_key = get_valid_api_key()
 
     headers = {
         "Authorization": f"Bearer {api_key}",

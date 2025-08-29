@@ -507,29 +507,36 @@ function sendAudioMessage(audioBlob) {
             
             // SPEAK the response for voice input
             speakResponse(response.data.reply_to_question.reply_to_question.toString());
+
+            // Add audio player for replay capability
+        addAudioPlaybackOption(response.data.reply_to_question.reply_to_question.toString(), messages);
         }
 
         // Handle gold_plan_suggestion (if present)
-        if (response.data.gold_plan_suggestion) {
-            const plan = response.data.gold_plan_suggestion;
+        if (response.data.reply_to_question.gold_plan_suggestion) {
+            const plan = response.data.reply_to_question.gold_plan_suggestion;
             const botPlanMessage = document.createElement('div');
             botPlanMessage.className = 'bot-message';
             botPlanMessage.innerHTML = `
                 <div style="padding: 12px; border-radius: 12px; background: linear-gradient(145deg, #a855f7, #c084fc); color: white; max-width: 300px; box-shadow: 0px 4px 6px rgba(0,0,0,0.1);">
-                    <p><strong>Would you like to invest in gold?</strong></p>
-                    <p><strong>Plan:</strong> ${plan.name}</p>
-                    <p><strong>Info:</strong> ${plan.description}</p>
+                    <p><strong>Would you like to buy a digital gold?</strong></p>
+                    <p> ${plan.name}</p>
+                    <p>>${plan.description}</p>
                     <button style="background: white; color: #a855f7; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: bold;">
                         Buy Now
+                    </button>
+                    <button style="background: white; color: #a855f7; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: bold;">
+                        Not Now
                     </button>
                 </div>
             `;
             messages.appendChild(botPlanMessage);
             
-            // SPEAK the gold plan suggestion for voice input
-            speakResponse(`Would you like to invest in gold? ${plan.name}. ${plan.description}`);
-        }
         
+        }
+
+        
+        // Scroll to bottom
         scrollToBottom();
     })
     .catch(function(error) {
@@ -540,6 +547,47 @@ function sendAudioMessage(audioBlob) {
         messages.appendChild(botMessage);
         scrollToBottom();
     });
+}
+
+
+        function addAudioPlaybackOption(text, messagesContainer) {
+    const playbackContainer = document.createElement('div');
+    playbackContainer.className = 'bot-message';
+    playbackContainer.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px; background: #f0f0f0; border-radius: 8px;">
+            <button class="play-pause-btn" style="width: 30px; height: 30px; border-radius: 50%; border: none; background: #6a0dad; color: white; cursor: pointer;">
+                <i class="fas fa-play"></i>
+            </button>
+            <span style="font-size: 14px;">Listen to response</span>
+        </div>
+    `;
+    
+    const playButton = playbackContainer.querySelector('.play-pause-btn');
+    let isPlaying = false;
+    
+    playButton.addEventListener('click', function() {
+        if (isPlaying) {
+            window.speechSynthesis.cancel();
+            playButton.innerHTML = '<i class="fas fa-play"></i>';
+            isPlaying = false;
+        } else {
+            speakResponse(text);
+            playButton.innerHTML = '<i class="fas fa-pause"></i>';
+            isPlaying = true;
+            
+            // Set up event listener for when speech ends
+            const checkSpeechEnd = setInterval(function() {
+                if (!window.speechSynthesis.speaking) {
+                    playButton.innerHTML = '<i class="fas fa-play"></i>';
+                    isPlaying = false;
+                    clearInterval(checkSpeechEnd);
+                }
+            }, 100);
+        }
+    });
+    
+    messagesContainer.appendChild(playbackContainer);
+    scrollToBottom();
 }
 
         // Display audio player in chat
@@ -734,27 +782,32 @@ function sendAudioMessage(audioBlob) {
             botMessage.textContent = response.data.reply_to_question.reply_to_question.toString();
             messages.appendChild(botMessage);
             
-            // DON'T speak the response for text input
-            // speakResponse(response.data.reply_to_question.toString());
+            // Add audio playback option
+            addAudioPlaybackOption(response.data.reply_to_question.reply_to_question.toString(), messages);
         }
 
         // Handle gold_plan_suggestion (if present)
-        if(response.data.gold_plan_suggestion) {
-            const plan = response.data.gold_plan_suggestion;
+// Handle gold_plan_suggestion (if present)
+        if (response.data.reply_to_question.gold_plan_suggestion) {
+            const plan = response.data.reply_to_question.gold_plan_suggestion;
             const botPlanMessage = document.createElement('div');
             botPlanMessage.className = 'bot-message';
             botPlanMessage.innerHTML = `
                 <div style="padding: 12px; border-radius: 12px; background: linear-gradient(145deg, #a855f7, #c084fc); color: white; max-width: 300px; box-shadow: 0px 4px 6px rgba(0,0,0,0.1);">
-                    <p><strong>Would you like to invest in gold?</strong></p>
-                    <p><strong>Plan:</strong> ${plan.name}</p>
-                    <p><strong>Info:</strong> ${plan.description}</p>
+                    <p><strong>Would you like to buy a digital gold?</strong></p>
+                    <p> ${plan.name}</p>
+                    <p>>${plan.description}</p>
                     <button style="background: white; color: #a855f7; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: bold;">
                         Buy Now
+                    </button>
+                    <button style="background: white; color: #a855f7; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: bold;">
+                        Not Now
                     </button>
                 </div>
             `;
             messages.appendChild(botPlanMessage);
             
+        
             // DON'T speak the gold plan suggestion for text input
             // speakResponse(`Would you like to invest in gold? ${plan.name}. ${plan.description}`);
         }
