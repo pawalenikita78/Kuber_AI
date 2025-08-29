@@ -26,7 +26,7 @@ if not mistral_keys or mistral_keys == [""]:
 # Round-robin cycle
 key_cycle = itertools.cycle(mistral_keys)
 
-def call_mistral(messages, model="mistral-small", temperature=0.2, retries=None):
+def call_mistral(messages, model="mistral-small", temperature=0.2, max_tokens=500, retries=None):
     """Try multiple API keys with retry if one fails"""
     if retries is None:
         retries = len(mistral_keys)
@@ -35,7 +35,7 @@ def call_mistral(messages, model="mistral-small", temperature=0.2, retries=None)
         api_key = next(key_cycle)
         client = Mistral(api_key=api_key)
         try:
-            resp = client.chat.complete(model=model, messages=messages, temperature=temperature)
+            resp = client.chat.complete(model=model, messages=messages, temperature=temperature, max_tokens=max_tokens)
             return resp.choices[0].message.content
         except requests.exceptions.HTTPError as e:
             if e.response is not None and e.response.status_code == 429:
@@ -153,7 +153,17 @@ def format_context(retrieved):
 
 def call_mistral_answer(query: str, context: str):
     messages = [
-        {"role": "system", "content": "You are a helpful financial assistant specialized in gold investments. Use only the context to answer, and be concise."},
+        {"role": "system", 
+        "content": """You are a helpful financial assistant specialized in gold investments. 
+            1. first answer their query normally using the context. 
+            2. **Then, softly suggest Digital Gold as a modern option (mention convenience, security, and small investments).**
+            3. Do not be pushy — just end by asking politely if they want to know more.
+            Example:  
+            User: "Is gold a good investment for the future?"  
+            Assistant: "Yes, gold is traditionally considered a safe investment during uncertain times because it preserves value.  
+                        Along with physical gold, many investors today also explore Digital Gold since it allows you to invest small amounts, offers secure storage, and is easy to buy or sell online.  
+                        Would you like me to share more about how Digital Gold works?" """
+        },
         {"role": "user", "content": f"Context:\n{context}\n\nQuestion:\n{query}\n\nAnswer:"}
     ]
     return call_mistral(messages, model="mistral-small", temperature=0.2)

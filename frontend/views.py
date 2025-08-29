@@ -1,13 +1,14 @@
 from django.shortcuts import render
 from django.http import JsonResponse
 import requests
-
-
-
-
+from django.views.decorators.csrf import csrf_exempt
+import speech_recognition as sr
+from pydub import AudioSegment
+import tempfile
+import os
 
 # Mistral API query function (Using API key)
-def query_mistral(prompt, context, history=None, max_tokens=100):
+def query_mistral(prompt, context, history=None, max_tokens=500):
     # Build conversation history string
     # history_str = ""
     # if history:
@@ -39,7 +40,7 @@ Kuber AI: Smart move! The Debt Tracker in Simplify Money helps you see how much 
 **Now answer this user’s question:**'''
 
     api_url = "https://api.mistral.ai/v1/chat/completions"
-    api_key = "ktMVozKRBYolWr6lzFdAwm2EeIBkiWMy"
+    api_key = "8m8WdBCe2wTrlc6arVyOOY1x0lSOP8FT"
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -47,13 +48,14 @@ Kuber AI: Smart move! The Debt Tracker in Simplify Money helps you see how much 
     }
 
     payload = {
-        "model": "mistral-tiny",
-        "messages": [
-            {"role": "user", "content": full_prompt}
-        ],
-        "temperature": 0.2,
-        "max_tokens": max_tokens
-    }
+    "model": "mistral-tiny",
+    "messages": [
+        {"role": "system", "content": full_prompt},   # Rules & instructions
+        {"role": "user", "content": prompt}           # Actual user input
+    ],
+    "temperature": 0.2,
+    "max_tokens": max_tokens
+}
 
     try:
         response = requests.post(api_url, headers=headers, json=payload)
@@ -72,11 +74,74 @@ import requests
 import random
 from django.http import JsonResponse
 
+@csrf_exempt
 def get_chatbot_response(request):
-    if request.method == 'GET':
-        user_input = request.GET.get('user_input', '')
+    if request.method == "POST":
+        if "audio" in request.FILES:  # 👈 Voice input
+            audio_file = request.FILES['audio']
+            # Save the uploaded audio file temporarily
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.webm') as tmp_file:
+                for chunk in audio_file.chunks():
+                    tmp_file.write(chunk)
+                tmp_path = tmp_file.name
+            
+            try:
+                # Convert audio to WAV format (required by SpeechRecognition)
+                audio = AudioSegment.from_file(tmp_path, format="webm")
+                wav_path = tmp_path + ".wav"
+                audio.export(wav_path, format="wav")
+                
+                # Perform speech-to-text
+                recognizer = sr.Recognizer()
+                with sr.AudioFile(wav_path) as source:
+                    audio_data = recognizer.record(source)
+                    text = recognizer.recognize_google(audio_data)
+                
+                # Clean up temporary files
+                os.unlink(tmp_path)
+                os.unlink(wav_path)
+                
+                # Now process the text as you would with regular text input
+                # Your existing text processing logic here
+                response_data = response_generation(text)  
+                print("response:", response_data)
 
-        # Step 1: Detect intent using FastAPI
+                return JsonResponse({"reply_to_question": response_data})
+
+            except Exception as e:
+                # Clean up temporary files in case of error
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+                if os.path.exists(wav_path):
+                    os.unlink(wav_path)
+                    
+                return JsonResponse({
+                    'error': f"Could not process audio: {str(e)}",
+                    'reply_to_question': "Sorry, I couldn't understand your audio message."
+                })
+        else:
+            import json
+            data = {}
+            if request.content_type == 'application/json':
+                try:
+                    data = json.loads(request.body)
+                except json.JSONDecodeError:
+                    return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+            user_input = data.get("user_input", "")
+            if not user_input:
+                return JsonResponse({"error": "No input provided"}, status=400)
+
+            bot_response = response_generation(user_input)
+            print("Final Bot Response:", bot_response)
+            return JsonResponse({"reply_to_question": bot_response})
+ 
+    else:
+        return JsonResponse({"error": "Only POST requests are allowed"}, status=405)
+
+
+def response_generation(user_input):
+    # Step 1: Detect intent using FastAPI
         intent_url = "http://localhost:8002/detect_gold_intent"
         try:
             intent_resp = requests.post(
@@ -104,23 +169,26 @@ def get_chatbot_response(request):
                 plan_resp = requests.get(plan_url, timeout=10)
                 plan_resp.raise_for_status()
                 suggested_plan = plan_resp.json()  # directly dict
-                print("type", type(suggested_plan))
-                print("[DEBUG] Retrieved Plan:", suggested_plan)
+                # print("type", type(suggested_plan))
+                # print("[DEBUG] Retrieved Plan:", suggested_plan)
 
             except Exception as e:
                 print("Error fetching gold plans:", e)
                 suggested_plan = {"plan_name": "N/A", "description": "Unable to fetch plan at this time."}
 
-            print("[DEBUG] Suggested Plan:", suggested_plan)
+            # print("[DEBUG] Suggested Plan:", suggested_plan)
             bot_response = {
                 "reply_to_question": bot_reply,
                 "gold_plan_suggestion": suggested_plan
             }
-
+            return bot_response
         else:
             print("[DEBUG] Non-gold intent, using Mistral workflow.")
+            
             bot_response = {
                 "reply_to_question": query_mistral(user_input, context="", history=None, max_tokens=100)
             }
 
-        return JsonResponse(bot_response)
+            print("[DEBUG] Mistral Response:", bot_response)
+
+            return bot_response

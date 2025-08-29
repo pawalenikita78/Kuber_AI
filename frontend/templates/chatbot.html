@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <title>Chatbot</title>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
@@ -121,7 +122,7 @@
         input:focus {
             box-shadow: inset 3px 3px 6px rgba(0, 0, 0, 0.2), inset -3px -3px 6px rgba(255, 255, 255, 0.6);
             outline: none;
-            border-color: #8a2be2;
+            border-color: #a871db;
         }
 
         button {
@@ -191,44 +192,80 @@
             }
         }
 
-        /* Audio player styling */
-        .audio-player {
-            margin-top: 8px;
-            width: 100%;
-            max-width: 250px;
-        }
+        /* Custom Audio Player Styles */
+.custom-audio-player {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    background: #f5f5f5;
+    border-radius: 8px;
+    width: 200px;
+    height: 50px;
+}
 
-        .audio-player audio {
-            width: 100%;
-        }
+.play-pause-btn {
+    width: 40px;
+    height: 40px;
+    border: none;
+    border-radius: 50%;
+    background: #007bff;
+    color: rgb(146, 86, 223);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+}
 
-        .recording-indicator {
-            display: inline-block;
-            margin-left: 8px;
-            color: #dc3545;
-            font-weight: bold;
-        }
+.progress-container {
+    flex-grow: 1;
+    height: 8px;
+    background: #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+    position: relative;
+}
 
-        .recording-indicator .dot {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background-color: #dc3545;
-            margin-right: 4px;
-            animation: blink 1s infinite;
-        }
+.progress-bar {
+    height: 100%;
+    background: #007bff;
+    border-radius: 4px;
+    width: 0%;
+}
 
-        @keyframes blink {
-            0% { opacity: 1; }
-            50% { opacity: 0.3; }
-            100% { opacity: 1; }
-        }
+.time-display {
+    font-size: 14px;
+    min-width: 50px;
+    text-align: center;
+    font-family: monospace;
+    color: #000;
+}
 
-        /* Scrollbar styling */
-        #chat-window::-webkit-scrollbar {
-            width: 8px;
-        }
+.volume-control {
+    display: flex;
+    align-items: right;
+    gap: 5px;
+}
+
+.volume-btn {
+    width: 40px;
+    height: 40px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 16px;
+    color: #a792f2;
+}
+
+.volume-slider {
+    width: 40px;
+}
+
+/* Scrollbar styling */
+#chat-window::-webkit-scrollbar {
+    width: 8px;
+}
 
         #chat-window::-webkit-scrollbar-track {
             background: #f1f1f1;
@@ -424,171 +461,374 @@
             }
         }
 
-        // Send audio message to backend
-        function sendAudioMessage(audioBlob) {
-            const messages = document.getElementById('messages');
-            
-            // Show typing indicator
-            const botTypingIndicator = document.createElement('div');
-            botTypingIndicator.className = 'typing-indicator bot-typing';
-            botTypingIndicator.textContent = 'Bot is processing audio...';
-            messages.appendChild(botTypingIndicator);
-            scrollToBottom();
-            
-            // Create form data to send the audio file
-            const formData = new FormData();
-            formData.append('audio', audioBlob, 'recording.webm');
-            
-            // Make an API call to send audio
-            axios.post('/process_audio/', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data'
-                }
-            })
-            .then(function(response) {
-                messages.removeChild(botTypingIndicator);
-                
-                // Handle text response
-                if (response.data.text_response) {
-                    const botMessage = document.createElement('div');
-                    botMessage.className = 'bot-message';
-                    botMessage.textContent = response.data.text_response;
-                    messages.appendChild(botMessage);
-                }
-                
-                // Handle audio response
-                if (response.data.audio_response) {
-                    // Assuming the response contains a URL to the audio file
-                    const audioUrl = response.data.audio_response;
-                    displayAudioPlayer(audioUrl, false, true);
-                }
-                
-                scrollToBottom();
-            })
-            .catch(function(error) {
-                messages.removeChild(botTypingIndicator);
-                const botMessage = document.createElement('div');
-                botMessage.className = 'bot-message';
-                botMessage.textContent = "Sorry, there was an error processing your audio. Please try again.";
-                messages.appendChild(botMessage);
-                scrollToBottom();
-            });
+       // Send audio message to backend for speech recognition
+function sendAudioMessage(audioBlob) {
+    const messages = document.getElementById('messages');
+    
+    // Show typing indicator
+    const botTypingIndicator = document.createElement('div');
+    botTypingIndicator.className = 'typing-indicator bot-typing';
+    botTypingIndicator.textContent = 'Processing your voice message...';
+    messages.appendChild(botTypingIndicator);
+    scrollToBottom();
+    
+    // Create form data to send the audio file
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'recording.webm');
+    
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute("content");
+    
+    // Make an API call to send audio - VOICE INPUT
+    axios.post('/get_chatbot_response/', formData, {
+        headers: {
+            'X-CSRFToken': csrfToken,
+            'Content-Type': 'multipart/form-data'
         }
+    })
+    .then(function(response) {
+        messages.removeChild(botTypingIndicator);
+        
+        // Display the transcribed text (optional)
+        if (response.data.transcribed_text) {
+            const transcribedDiv = document.createElement('div');
+            transcribedDiv.className = 'user-message';
+            transcribedDiv.textContent = response.data.transcribed_text;
+            transcribedDiv.style.fontStyle = 'italic';
+            transcribedDiv.style.opacity = '0.7';
+            messages.appendChild(transcribedDiv);
+        }
+        
+        // Handle text response
+        if (response.data.reply_to_question) {
+            const botMessage = document.createElement('div');
+            botMessage.className = 'bot-message';
+            botMessage.textContent = response.data.reply_to_question.reply_to_question.toString();
+            messages.appendChild(botMessage);
+            
+            // SPEAK the response for voice input
+            speakResponse(response.data.reply_to_question.reply_to_question.toString());
+        }
+
+        // Handle gold_plan_suggestion (if present)
+        if (response.data.gold_plan_suggestion) {
+            const plan = response.data.gold_plan_suggestion;
+            const botPlanMessage = document.createElement('div');
+            botPlanMessage.className = 'bot-message';
+            botPlanMessage.innerHTML = `
+                <div style="padding: 12px; border-radius: 12px; background: linear-gradient(145deg, #a855f7, #c084fc); color: white; max-width: 300px; box-shadow: 0px 4px 6px rgba(0,0,0,0.1);">
+                    <p><strong>Would you like to invest in gold?</strong></p>
+                    <p><strong>Plan:</strong> ${plan.name}</p>
+                    <p><strong>Info:</strong> ${plan.description}</p>
+                    <button style="background: white; color: #a855f7; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: bold;">
+                        Buy Now
+                    </button>
+                </div>
+            `;
+            messages.appendChild(botPlanMessage);
+            
+            // SPEAK the gold plan suggestion for voice input
+            speakResponse(`Would you like to invest in gold? ${plan.name}. ${plan.description}`);
+        }
+        
+        scrollToBottom();
+    })
+    .catch(function(error) {
+        messages.removeChild(botTypingIndicator);
+        const botMessage = document.createElement('div');
+        botMessage.className = 'bot-message';
+        botMessage.textContent = "Sorry, there was an error processing your audio. Please try again.";
+        messages.appendChild(botMessage);
+        scrollToBottom();
+    });
+}
 
         // Display audio player in chat
         function displayAudioPlayer(audioUrl, isUserMessage = false, isBotResponse = false) {
-            const messages = document.getElementById('messages');
+    const messages = document.getElementById('messages');
+    
+    // Create message container
+    const messageDiv = document.createElement('div');
+    messageDiv.className = isUserMessage ? 'user-message' : 'bot-message';
+    
+    // Create custom audio player
+    const audioContainer = document.createElement('div');
+    audioContainer.className = 'custom-audio-player';
+    
+    // Create audio element (hidden)
+    const audioElement = document.createElement('audio');
+    audioElement.src = audioUrl;
+    
+    // Play/Pause button
+    const playPauseBtn = document.createElement('button');
+    playPauseBtn.className = 'play-pause-btn';
+    playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
+    
+    // Progress container
+    const progressContainer = document.createElement('div');
+    progressContainer.className = 'progress-container';
+    
+    const progressBar = document.createElement('div');
+    progressBar.className = 'progress-bar';
+    progressContainer.appendChild(progressBar);
+    
+    // Time display
+    const timeDisplay = document.createElement('div');
+    timeDisplay.className = 'time-display';
+    timeDisplay.textContent = '0:00';
+    
+    // Volume control
+    const volumeControl = document.createElement('div');
+    volumeControl.className = 'volume-control';
+    
+    const volumeBtn = document.createElement('button');
+    volumeBtn.className = 'volume-btn';
+    volumeBtn.innerHTML = '<i class="fas fa-volume-up"></i>';
+    
+    const volumeSlider = document.createElement('input');
+    volumeSlider.type = 'range';
+    volumeSlider.className = 'volume-slider';
+    volumeSlider.min = '0';
+    volumeSlider.max = '1';
+    volumeSlider.step = '0.1';
+    volumeSlider.value = '1';
+    
+    volumeControl.appendChild(volumeBtn);
+    
+    // Assemble the custom audio player
+    audioContainer.appendChild(playPauseBtn);
+    audioContainer.appendChild(volumeControl);
+    audioContainer.appendChild(timeDisplay);
+   
+    
+    // Add hidden audio element
+    audioContainer.appendChild(audioElement);
+    
+    // Add audio player to message
+    messageDiv.appendChild(audioContainer);
+    
+    // Add to chat
+    messages.appendChild(messageDiv);
+    scrollToBottom();
+    
+    // Add event listeners for custom controls
+    playPauseBtn.addEventListener('click', function() {
+        if (audioElement.paused) {
+            audioElement.play();
+            playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
+        } else {
+            audioElement.pause();
+            playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
+        }
+    });
+    
+    audioElement.addEventListener('timeupdate', function() {
+        const currentTime = audioElement.currentTime;
+        const duration = audioElement.duration;
+        
+        // Update progress bar
+        const progressPercent = (currentTime / duration) * 100;
+        progressBar.style.width = `${progressPercent}%`;
+        
+        // Update time display
+        const minutes = Math.floor(currentTime / 60);
+        const seconds = Math.floor(currentTime % 60);
+        timeDisplay.textContent = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+    });
+    
+    progressContainer.addEventListener('click', function(e) {
+        const rect = progressContainer.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
+        const width = rect.width;
+        const duration = audioElement.duration;
+        
+        audioElement.currentTime = (clickX / width) * duration;
+    });
+    
+    volumeSlider.addEventListener('input', function() {
+        audioElement.volume = volumeSlider.value;
+        
+        // Update volume button icon
+        if (volumeSlider.value == 0) {
+            volumeBtn.innerHTML = '<i class="fas fa-volume-mute"></i>';
+        } else if (volumeSlider.value < 0.5) {
+            volumeBtn.innerHTML = '<i class="fas fa-volume-down"></i>';
+        } else {
+            volumeBtn.innerHTML = '<i class="fas fa-volume-up"></i>';
+        }
+    });
+    
+    volumeBtn.addEventListener('click', function() {
+        if (audioElement.volume > 0) {
+            audioElement.volume = 0;
+            volumeSlider.value = 0;
+            volumeBtn.innerHTML = '<i class="fas fa-volume-mute"></i>';
+        } else {
+            audioElement.volume = 1;
+            volumeSlider.value = 1;
+            volumeBtn.innerHTML = '<i class="fas fa-volume-up"></i>';
+        }
+    });
+    
+    audioElement.addEventListener('ended', function() {
+        playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
+        progressBar.style.width = '0%';
+        timeDisplay.textContent = '0:00';
+        
+        if (isBotResponse) {
+            console.log('Audio playback finished');
+        }
+    });
+    
+    // Auto-play if it's the first bot audio response
+    if (isBotResponse && firstAudioResponse) {
+        firstAudioResponse = false;
+        audioElement.play().catch(e => {
+            console.log('Auto-play prevented:', e);
+        });
+        playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
+    }
+}
+
+       function sendMessage() {
+    const promptInput = document.getElementById('prompt');
+    const prompt = promptInput.value.trim();
+    const messages = document.getElementById('messages');
+    
+    if (!prompt) return;
+
+    // Add user message to chat
+    const userMessage = document.createElement('div');
+    userMessage.className = 'user-message';
+    userMessage.textContent = prompt;
+    messages.appendChild(userMessage);
+
+    // Show typing indicator
+    const botTypingIndicator = document.createElement('div');
+    botTypingIndicator.className = 'typing-indicator bot-typing';
+    botTypingIndicator.textContent = 'Bot is typing...';
+    messages.appendChild(botTypingIndicator);
+
+    // Clear input field
+    promptInput.value = '';
+    scrollToBottom();
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute("content");
+    
+    // Make an API call to Django backend - TEXT INPUT
+    axios.post('/get_chatbot_response/', {
+        user_input: prompt,
+        type: "text",
+        output: "text"  // Request text output only
+    }, {
+        headers: {
+            'X-CSRFToken': csrfToken
+        }
+    })
+    .then(function(response) {
+        messages.removeChild(botTypingIndicator);
+
+        // Handle reply_to_question
+        if(response.data.reply_to_question) {
+            const botMessage = document.createElement('div');
+            botMessage.className = 'bot-message';
+            botMessage.textContent = response.data.reply_to_question.reply_to_question.toString();
+            messages.appendChild(botMessage);
             
-            // Create message container
-            const messageDiv = document.createElement('div');
-            messageDiv.className = isUserMessage ? 'user-message' : 'bot-message';
-            
-            // Create audio element
-            const audioElement = document.createElement('audio');
-            audioElement.controls = true;
-            audioElement.src = audioUrl;
-            
-            // Add audio player to message
-            const audioContainer = document.createElement('div');
-            audioContainer.className = 'audio-player';
-            audioContainer.appendChild(audioElement);
-            messageDiv.appendChild(audioContainer);
-            
-            // Add to chat
-            messages.appendChild(messageDiv);
-            scrollToBottom();
-            
-            // Auto-play if it's the first bot audio response
-            if (isBotResponse && firstAudioResponse) {
-                firstAudioResponse = false;
-                audioElement.play().catch(e => {
-                    console.log('Auto-play prevented:', e);
-                });
-            }
-            
-            // Add event listener for when audio finishes playing
-            audioElement.addEventListener('ended', () => {
-                if (isBotResponse) {
-                    // You could add a visual indicator that playback finished
-                    console.log('Audio playback finished');
-                }
-            });
+            // DON'T speak the response for text input
+            // speakResponse(response.data.reply_to_question.toString());
         }
 
-        function sendMessage() {
-            const promptInput = document.getElementById('prompt');
-            const prompt = promptInput.value.trim();
-            const messages = document.getElementById('messages');
+        // Handle gold_plan_suggestion (if present)
+        if(response.data.gold_plan_suggestion) {
+            const plan = response.data.gold_plan_suggestion;
+            const botPlanMessage = document.createElement('div');
+            botPlanMessage.className = 'bot-message';
+            botPlanMessage.innerHTML = `
+                <div style="padding: 12px; border-radius: 12px; background: linear-gradient(145deg, #a855f7, #c084fc); color: white; max-width: 300px; box-shadow: 0px 4px 6px rgba(0,0,0,0.1);">
+                    <p><strong>Would you like to invest in gold?</strong></p>
+                    <p><strong>Plan:</strong> ${plan.name}</p>
+                    <p><strong>Info:</strong> ${plan.description}</p>
+                    <button style="background: white; color: #a855f7; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: bold;">
+                        Buy Now
+                    </button>
+                </div>
+            `;
+            messages.appendChild(botPlanMessage);
             
-            if (!prompt) return;
-
-            // Add user message to chat
-            const userMessage = document.createElement('div');
-            userMessage.className = 'user-message';
-            userMessage.textContent = prompt;
-            messages.appendChild(userMessage);
-
-            // Show typing indicator
-            const botTypingIndicator = document.createElement('div');
-            botTypingIndicator.className = 'typing-indicator bot-typing';
-            botTypingIndicator.textContent = 'Bot is typing...';
-            messages.appendChild(botTypingIndicator);
-
-            // Clear input field
-            promptInput.value = '';
-            scrollToBottom();
-
-            // Make an API call to Django backend
-            axios.get('/get_chatbot_response/', {
-                params: { user_input: prompt }
-            })
-            .then(function(response) {
-                messages.removeChild(botTypingIndicator);
-
-                // Handle reply_to_question
-                if(response.data.reply_to_question) {
-                    const botMessage = document.createElement('div');
-                    botMessage.className = 'bot-message';
-                    botMessage.textContent = response.data.reply_to_question;
-                    messages.appendChild(botMessage);
-                }
-
-                // Handle gold_plan_suggestion (if present)
-                if(response.data.gold_plan_suggestion) {
-                    const plan = response.data.gold_plan_suggestion;
-
-                    // Create a new bot message div
-                    const botPlanMessage = document.createElement('div');
-                    botPlanMessage.className = 'bot-message';
-
-                    // Insert the styled HTML card
-                    botPlanMessage.innerHTML = `
-                        <div style="padding: 12px; border-radius: 12px; background: linear-gradient(145deg, #a855f7, #c084fc); color: white; max-width: 300px; box-shadow: 0px 4px 6px rgba(0,0,0,0.1);">
-                            <p><strong>Would you like to invest in gold?</strong></p>
-                            <p><strong>Plan:</strong> ${plan.name}</p>
-                            <p><strong>Info:</strong> ${plan.description}</p>
-                            <button style="background: white; color: #a855f7; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: bold;">
-                            Buy Now
-                        </button>
-                        </div>
-                    `;
-
-                    // Append it to your messages container
-                    messages.appendChild(botPlanMessage);
-                }
-
-                scrollToBottom();
-            })
-            .catch(function(error) {
-                messages.removeChild(botTypingIndicator);
-                const botMessage = document.createElement('div');
-                botMessage.className = 'bot-message';
-                botMessage.textContent = "Sorry, there was an error. Please try again.";
-                messages.appendChild(botMessage);
-                scrollToBottom();
-            });
+            // DON'T speak the gold plan suggestion for text input
+            // speakResponse(`Would you like to invest in gold? ${plan.name}. ${plan.description}`);
         }
 
+        scrollToBottom();
+    })
+    .catch(function(error) {
+        messages.removeChild(botTypingIndicator);
+        const botMessage = document.createElement('div');
+        botMessage.className = 'bot-message';
+        botMessage.textContent = "Sorry, there was an error. Please try again.";
+        messages.appendChild(botMessage);
+        scrollToBottom();
+    });
+}
+// Global variables for speech synthesis
+let selectedVoice = null;
+
+// Function to load available voices
+function loadVoices() {
+    const voices = window.speechSynthesis.getVoices();
+    // Try to find a preferred voice (like 'Neerja' for Indian English)
+    selectedVoice = voices.find(voice => 
+        voice.name.toLowerCase().includes('neerja') || 
+        voice.lang.includes('en-IN')
+    );
+    
+    if (!selectedVoice) {
+        // Fallback to any English voice
+        selectedVoice = voices.find(voice => voice.lang.includes('en'));
+        console.warn("Preferred voice not found. Using default voice.");
+    }
+}
+
+// Initialize voices when page loads
+if (window.speechSynthesis.getVoices().length > 0) {
+    loadVoices();
+} else {
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+}
+
+// Function to speak the response
+function speakResponse(text) {
+    // Stop any ongoing speech
+    window.speechSynthesis.cancel();
+    
+    // Create a new speech utterance
+    const speech = new SpeechSynthesisUtterance(text);
+    speech.lang = 'en-IN'; // Set to Indian English
+    
+    // Use the selected voice if available
+    if (selectedVoice) {
+        speech.voice = selectedVoice;
+    }
+    
+    // Set event handlers
+    speech.onstart = () => {
+        // Change mic icon to indicate speech is in progress
+        document.getElementById('mic-btn').innerHTML = '<i class="fas fa-volume-up"></i>';
+    };
+    
+    speech.onend = () => {
+        // Restore mic icon
+        document.getElementById('mic-btn').innerHTML = '<i class="fas fa-microphone"></i>';
+    };
+    
+    speech.onerror = (event) => {
+        console.error('Speech synthesis error:', event.error);
+        document.getElementById('mic-btn').innerHTML = '<i class="fas fa-microphone"></i>';
+    };
+    
+    // Speak the text
+    window.speechSynthesis.speak(speech);
+}
         function scrollToBottom() {
             const chatWindow = document.getElementById('chat-window');
             chatWindow.scrollTop = chatWindow.scrollHeight;
